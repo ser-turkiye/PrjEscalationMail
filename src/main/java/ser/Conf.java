@@ -26,7 +26,6 @@ public class Conf {
         public static final String BPM = "BPM";
         public static final String Company = "D_QCON";
         public static final String ProjectFolder = "PRJ_FOLDER";
-        public static final String ProjectWorkspace = "PRJ_FOLDER";
     }
     public static class ClassIDs{
         public static final String Template = "b9cf43d1-a4d3-482f-9806-44ae64c6139d";

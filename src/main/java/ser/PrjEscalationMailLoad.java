@@ -23,7 +23,6 @@ import java.util.concurrent.TimeUnit;
 
 public class PrjEscalationMailLoad extends UnifiedAgent {
 
-    IUser usr;
     ISession ses;
     IDocumentServer srv;
     IBpmService bpm;
@@ -45,7 +44,6 @@ public class PrjEscalationMailLoad extends UnifiedAgent {
 
         bpm = getBpm();
         ses = getSes();
-        usr = ses.getUser();
         srv = ses.getDocumentServer();
 
         try {
