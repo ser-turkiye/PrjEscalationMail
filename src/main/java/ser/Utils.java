@@ -301,13 +301,13 @@ public class Utils {
         String whereClause = builder.toString();
         System.out.println("Where Clause: " + whereClause);
 
-        IInformationObject[] informationObjects = helper.createQuery(new String[]{Conf.Databases.ProjectFolder} , whereClause , "", 1);
+        IInformationObject[] informationObjects = helper.createQuery(new String[]{Conf.Databases.ProjectFolder}, whereClause, "", 1, false);
         if(informationObjects.length < 1) {return null;}
         return informationObjects[0];
     }
-
-    static IDocument getTemplateDocument(IInformationObject info, String tpltName) throws Exception {
+    static IDocument getTemplateDocument(IInformationObject info, String tpltName, ISession ses, IDocumentServer srv) throws Exception {
         List<INode> nods = ((IFolder) info).getNodesByName("Templates");
+        IDocument rtrn = null;
         for(INode node : nods){
             IElements elms = node.getElements();
 
@@ -322,24 +322,15 @@ public class Utils {
                 String etpn = tplt.getDescriptorValue(Conf.Descriptors.TemplateName, String.class);
                 if(etpn == null || !etpn.equals(tpltName)){continue;}
 
-                return (IDocument) tplt;
+                rtrn = (IDocument) tplt;
+                break;
             }
+            if(rtrn != null){break;}
         }
-        return null;
-    }
-    static IDocument getTemplateDocument_old01(String prjNo, String tpltName, ProcessHelper helper)  {
-        StringBuilder builder = new StringBuilder();
-        builder.append("TYPE = '").append(Conf.ClassIDs.Template).append("'")
-                .append(" AND ")
-                .append(Conf.DescriptorLiterals.PrjCardCode).append(" = '").append(prjNo).append("'")
-                .append(" AND ")
-                .append(Conf.DescriptorLiterals.ObjectNumberExternal).append(" = '").append(tpltName).append("'");
-        String whereClause = builder.toString();
-        System.out.println("Where Clause: " + whereClause);
-
-        IInformationObject[] informationObjects = helper.createQuery(new String[]{Conf.Databases.Company} , whereClause , "",1);
-        if(informationObjects.length < 1) {return null;}
-        return (IDocument) informationObjects[0];
+        if(srv != null && ses != null) {
+            rtrn = srv.getDocumentCurrentVersion(ses, rtrn.getID());
+        }
+        return rtrn;
     }
     public static JSONObject
     getExcelConfig(String excelPath) throws Exception {

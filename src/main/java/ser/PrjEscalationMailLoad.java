@@ -85,7 +85,7 @@ public class PrjEscalationMailLoad extends UnifiedAgent {
 
         System.out.println("Where Clause: " + whereClause);
 
-        IInformationObject[] rtrn = helper.createQuery(new String[]{Conf.Databases.BPM} , whereClause , "", 0);
+        IInformationObject[] rtrn = helper.createQuery(new String[]{Conf.Databases.BPM} , whereClause , "", 0, false);
         if(rtrn == null){return ArrayUtils.toArray();}
         return rtrn;
     }
@@ -94,7 +94,7 @@ public class PrjEscalationMailLoad extends UnifiedAgent {
         builder.append("TYPE = '").append(Conf.ClassIDs.Project).append("'");
         String whereClause = builder.toString();
         
-        IInformationObject[] rtrn = helper.createQuery(new String[]{Conf.Databases.ProjectFolder} , whereClause , "",0);
+        IInformationObject[] rtrn = helper.createQuery(new String[]{Conf.Databases.ProjectFolder} , whereClause , "",0, false);
         if(rtrn == null){return ArrayUtils.toArray();}
         return rtrn;
     }
@@ -334,7 +334,7 @@ public class PrjEscalationMailLoad extends UnifiedAgent {
         IInformationObject prjt = getProject(prjn);
         if(prjt == null){return null;}
 
-        IDocument dtpl = Utils.getTemplateDocument(prjt, Conf.MailTemplates.Project);
+        IDocument dtpl = Utils.getTemplateDocument(prjt, Conf.MailTemplates.Project, ses, srv);
         if(dtpl == null){
             mailTemplates.put("!" + prjn, "[[ " + prjn + " ]]");
             return null;

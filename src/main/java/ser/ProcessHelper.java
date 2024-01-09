@@ -98,8 +98,7 @@ public class ProcessHelper {
         }
         return true;
     }
-
-    public IInformationObject[] createQuery(String[] dbNames, String whereClause, String order, int maxHits){
+    public IInformationObject[] createQuery(String[] dbNames, String whereClause, String order, int maxHits, boolean lver){
         String[] databaseNames = dbNames;
 
         ISerClassFactory fac = documentServer.getClassFactory();
@@ -108,6 +107,8 @@ public class ProcessHelper {
                 databaseNames ,
                 fac.getExpressionInstance(whereClause) ,
                 null,null);
+
+        if(lver){que.setCurrentVersionOnly(true);}
 
         if(maxHits > 0) {
             que.setMaxHits(maxHits);
