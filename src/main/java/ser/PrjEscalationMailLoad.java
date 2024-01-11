@@ -1,13 +1,14 @@
 package ser;
 
 import com.ser.blueline.*;
-import com.ser.blueline.bpm.IBpmService;
 import com.ser.blueline.bpm.IProcessInstance;
 import com.ser.blueline.bpm.ITask;
 import com.ser.blueline.bpm.IWorkbasket;
 import de.ser.doxis4.agentserver.UnifiedAgent;
 import de.ser.sst.shared.lang.ArrayUtils;
 import org.apache.commons.io.FilenameUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.poi.common.usermodel.HyperlinkType;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -22,11 +23,7 @@ import java.util.concurrent.TimeUnit;
 
 
 public class PrjEscalationMailLoad extends UnifiedAgent {
-
-    ISession ses;
-    IDocumentServer srv;
-    IBpmService bpm;
-
+    Logger log = LogManager.getLogger();
     JSONObject mailTemplates = new JSONObject();
     JSONObject excelConfigs = new JSONObject();
     JSONObject mailConfig = new JSONObject();
@@ -40,20 +37,19 @@ public class PrjEscalationMailLoad extends UnifiedAgent {
         if (getBpm() == null)
             return resultError("Null BPM object");
 
-        (new File(Conf.PrjEscalationMailPaths.MainPath)).mkdirs();
-
-        bpm = getBpm();
-        ses = getSes();
-        srv = ses.getDocumentServer();
+        Utils.session = getSes();
+        Utils.bpm = getBpm();
+        Utils.server = Utils.session.getDocumentServer();
+        Utils.loadDirectory(Conf.Paths.MainPath);
 
         try {
             execId = UUID.randomUUID().toString();
-            JSONObject scfg = Utils.getSystemConfig(ses);
+            JSONObject scfg = Utils.getSystemConfig();
             if(scfg.has("LICS.SPIRE_XLS")){
                 com.spire.license.LicenseProvider.setLicenseKey(scfg.getString("LICS.SPIRE_XLS"));
             }
-            helper = new ProcessHelper(ses);
-            mailConfig = Utils.getMailConfig(ses, srv, "");
+            helper = new ProcessHelper(Utils.session);
+            mailConfig = Utils.getMailConfig();
 
             IInformationObject[] prjs = getProjects(helper);
             for(IInformationObject cprj : prjs){
@@ -196,7 +192,7 @@ public class PrjEscalationMailLoad extends UnifiedAgent {
         }
 
         for(String line : list){
-            IWorkbasket lwbk = bpm.getWorkbasket(line);
+            IWorkbasket lwbk = Utils.bpm.getWorkbasket(line);
             if(lwbk == null){continue;}
 
             String wbMail = lwbk.getNotifyEMail();
@@ -239,7 +235,7 @@ public class PrjEscalationMailLoad extends UnifiedAgent {
                                     IDocument tplDoc, String ekey, ITask task, String to, String[] cc,
                                     long esca, long durd, double durh) throws Exception {
         String uniqueId = UUID.randomUUID().toString();
-        String mailExcelPath = Utils.exportDocument(tplDoc, Conf.PrjEscalationMailPaths.MainPath, "[" + prjn + "]" + execId + "@" + uniqueId);
+        String mailExcelPath = Utils.exportDocument(tplDoc, Conf.Paths.MainPath, "[" + prjn + "]" + execId + "@" + uniqueId);
         JSONObject params = new JSONObject();
 
         IProcessInstance proi = task.getProcessInstance();
@@ -260,7 +256,7 @@ public class PrjEscalationMailLoad extends UnifiedAgent {
 
         saveEscalationExcel(mailExcelPath, ecfg.getString("SheetName"), params);
         String mailHtmlPath = Utils.convertExcelToHtml(mailExcelPath,
-                Conf.PrjEscalationMailPaths.MainPath + "/" + "[" + prjn + "]" + execId + "@" + uniqueId + ".html");
+                Conf.Paths.MainPath + "/" + "[" + prjn + "]" + execId + "@" + uniqueId + ".html");
         JSONObject mail = new JSONObject();
 
         mail.put("To", to);
@@ -272,7 +268,7 @@ public class PrjEscalationMailLoad extends UnifiedAgent {
         mail.put("BodyHTMLFile", mailHtmlPath);
 
         try {
-            Utils.sendHTMLMail(ses, srv, mailConfig, mail);
+            Utils.sendHTMLMail(mailConfig, mail);
         } catch (Exception ex){
             System.out.println("EXCP [Send-Mail] : " + ex.getMessage());
         }
@@ -334,7 +330,7 @@ public class PrjEscalationMailLoad extends UnifiedAgent {
         IInformationObject prjt = getProject(prjn);
         if(prjt == null){return null;}
 
-        IDocument dtpl = Utils.getTemplateDocument(prjt, Conf.MailTemplates.Project, ses, srv);
+        IDocument dtpl = Utils.getTemplateDocument(prjt, Conf.MailTemplates.Project);
         if(dtpl == null){
             mailTemplates.put("!" + prjn, "[[ " + prjn + " ]]");
             return null;
@@ -346,7 +342,7 @@ public class PrjEscalationMailLoad extends UnifiedAgent {
         if(excelConfigs.has(prjn)){return (JSONObject) excelConfigs.get(prjn);}
         if(excelConfigs.has("!" + prjn)){return null;}
 
-        String excelPath = FileEvents.fileExport(template, Conf.PrjEscalationMailPaths.MainPath, "[" + prjn + "]" + execId);
+        String excelPath = FileEvents.fileExport(template, Conf.Paths.MainPath, "[" + prjn + "]" + execId);
         JSONObject ecfg = (FilenameUtils.getExtension(excelPath).toString().toUpperCase().equals("XLSX") ?
                 Utils.getExcelConfig(excelPath) : new JSONObject());
         if(!ecfg.has("SheetName")){

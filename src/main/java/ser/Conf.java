@@ -15,7 +15,7 @@ public class Conf {
         public static final List<Integer> MailHideCols = List.of(0);
         public static final Integer MailColInx = 0;
     }
-    public static class PrjEscalationMailPaths {
+    public static class Paths {
         public static final String MainPath = "C:/tmp2/bulk/escalation-mails";
         public static final String WebBase = "http://localhost/webcube/";
     }

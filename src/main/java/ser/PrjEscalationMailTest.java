@@ -4,6 +4,8 @@ import com.ser.blueline.*;
 import com.ser.blueline.bpm.*;
 import de.ser.doxis4.agentserver.UnifiedAgent;
 import org.apache.commons.collections4.IteratorUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
 
 import java.io.File;
@@ -15,11 +17,9 @@ import static ser.Utils.saveWBInboxExcel;
 
 
 public class PrjEscalationMailTest extends UnifiedAgent {
+    Logger log = LogManager.getLogger();
 
     IUser usr;
-    ISession ses;
-    IDocumentServer srv;
-    IBpmService bpm;
 
     JSONObject tpls = new JSONObject();
     JSONObject ntps = new JSONObject();
@@ -31,20 +31,20 @@ public class PrjEscalationMailTest extends UnifiedAgent {
         if (getBpm() == null)
             return resultError("Null BPM object");
 
-        (new File(Conf.PrjEscalationMailPaths.MainPath)).mkdir();
+        Utils.session = getSes();
+        Utils.bpm = getBpm();
+        Utils.server = Utils.session.getDocumentServer();
+        Utils.loadDirectory(Conf.Paths.MainPath);
 
-        bpm = getBpm();
-        ses = getSes();
-        usr = ses.getUser();
-        srv = ses.getDocumentServer();
+        usr = Utils.session.getUser();
 
         try {
-            helper = new ProcessHelper(ses);
-            JSONObject mcfg = Utils.getMailConfig(ses, srv, "");
+            helper = new ProcessHelper(Utils.session);
+            JSONObject mcfg = Utils.getMailConfig();
 
-            List<IWorkbasket> wbs = bpm.getWorkbaskets();
+            List<IWorkbasket> wbs = Utils.bpm.getWorkbaskets();
             for (IWorkbasket wb : wbs){
-                IWorkbasket swb = bpm.getWorkbasket(wb.getID());
+                IWorkbasket swb = Utils.bpm.getWorkbasket(wb.getID());
                 runWorkbasket(swb, mcfg);
 
             }
@@ -80,7 +80,7 @@ public class PrjEscalationMailTest extends UnifiedAgent {
         IInformationObject prjt = getProject(prjn);
         if(prjt == null){return null;}
 
-        IDocument dtpl = Utils.getTemplateDocument(prjt, Conf.MailTemplates.Project, ses, srv);
+        IDocument dtpl = Utils.getTemplateDocument(prjt, Conf.MailTemplates.Project);
         if(dtpl == null){
             tpls.put("!" + prjn, "[[ " + prjn + " ]]");
             return null;
@@ -165,7 +165,7 @@ public class PrjEscalationMailTest extends UnifiedAgent {
             IDocument dtpl = getMailTplDocument(prjn);
             if(dtpl == null){continue;}
 
-            String mailExcelPath = Utils.exportDocument(dtpl, Conf.PrjEscalationMailPaths.MainPath, Conf.MailTemplates.Project + "@" + prjn + "[" + uniqueId + "]");
+            String mailExcelPath = Utils.exportDocument(dtpl, Conf.Paths.MainPath, Conf.MailTemplates.Project + "@" + prjn + "[" + uniqueId + "]");
             List<String> dids = IteratorUtils.toList(docs.keys());
 
             loadTableRows(mailExcelPath, Conf.WBInboxMailSheetIndex.Mail, "Task", Conf.WBInboxMailRowGroups.MailColInx, dids.size());
@@ -190,7 +190,7 @@ public class PrjEscalationMailTest extends UnifiedAgent {
             saveWBInboxExcel(mailExcelPath, Conf.WBInboxMailSheetIndex.Mail, mbms);
 
             String mailHtmlPath = Utils.convertExcelToHtml(mailExcelPath,
-                    Conf.PrjEscalationMailPaths.MainPath + "/" + Conf.MailTemplates.Project + "@" + prjn + "[" + uniqueId + "].html");
+                    Conf.Paths.MainPath + "/" + Conf.MailTemplates.Project + "@" + prjn + "[" + uniqueId + "].html");
             JSONObject mail = new JSONObject();
 
             mail.put("To", wbMail);
@@ -198,7 +198,7 @@ public class PrjEscalationMailTest extends UnifiedAgent {
             mail.put("BodyHTMLFile", mailHtmlPath);
 
             try {
-                Utils.sendHTMLMail(ses, srv, mcfg, mail);
+                Utils.sendHTMLMail(mcfg, mail);
             } catch (Exception ex){
                 System.out.println("EXCP [Send-Mail] : " + ex.getMessage());
             }

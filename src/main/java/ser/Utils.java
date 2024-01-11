@@ -1,6 +1,12 @@
 package ser;
 
 import com.ser.blueline.*;
+import com.ser.blueline.bpm.IBpmService;
+import com.ser.blueline.bpm.IProcessInstance;
+import com.ser.blueline.bpm.IProcessType;
+import com.ser.blueline.bpm.ITask;
+import com.ser.blueline.metaDataComponents.IArchiveClass;
+import com.ser.blueline.metaDataComponents.IArchiveFolderClass;
 import com.ser.blueline.metaDataComponents.IStringMatrix;
 import com.ser.foldermanager.IElement;
 import com.ser.foldermanager.IElements;
@@ -17,6 +23,8 @@ import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeBodyPart;
 import jakarta.mail.internet.MimeMessage;
 import jakarta.mail.internet.MimeMultipart;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.poi.common.usermodel.HyperlinkType;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.util.CellRangeAddress;
@@ -24,34 +32,98 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class Utils {
-
-
-    static JSONObject
-    getSystemConfig(ISession ses) throws Exception {
-        return getSystemConfig(ses, null);
+    static Logger log = LogManager.getLogger();
+    static ISession session = null;
+    static IDocumentServer server = null;
+    static IBpmService bpm;
+    static JSONObject sysConfigs;
+    static void loadDirectory(String path) {
+        (new File(path)).mkdir();
     }
-    static JSONObject
-    getSystemConfig(ISession ses, IStringMatrix mtrx) throws Exception {
+    static void loadSystemConfig() throws Exception {
+        if(session == null || server == null){return;}
+
+        IStringMatrix mtrx = server.getStringMatrix("SYS_CONFIGS", session);
+        if(mtrx == null) throw new Exception("SystemConfig Global Value List not found");
+
+        List<List<String>> rawTable = mtrx.getRawRows();
+        String srvn = session.getSystem().getName().toUpperCase();
+        sysConfigs = new JSONObject();
+
+        for(List<String> line : rawTable) {
+            String grpn = line.get(0);
+            String name = line.get(1);
+            String cval = line.get(2);
+
+            grpn = (grpn == null ? "" : grpn);
+            name = (name == null ? "" : name);
+            cval = (cval == null ? "" : cval);
+
+            if(grpn.isEmpty()){continue;}
+            if(name.isEmpty()){continue;}
+
+            if(!grpn.toUpperCase().startsWith(srvn + ".")){continue;}
+            String gpnm = grpn.substring(srvn.length() + ".".length());
+
+            JSONObject gobj = (!sysConfigs.has(gpnm) ? new JSONObject() : (JSONObject) sysConfigs.get(gpnm));
+            gobj.put(name, cval);
+
+            sysConfigs.put(gpnm, gobj);
+
+        }
+    }
+    public static boolean hasDescriptor(IInformationObject object, String descName){
+        IDescriptor[] descs = session.getDocumentServer().getDescriptorByName(descName, session);
+        List<String> checkList = new ArrayList<>();
+        for(IDescriptor ddsc : descs){
+            checkList.add(ddsc.getId());
+        }
+
+        String[] descIds = new String[0];
+        if(object instanceof IFolder){
+            String classID = object.getClassID();
+            IArchiveFolderClass folderClass = session.getDocumentServer().getArchiveFolderClass(classID , session);
+            descIds = folderClass.getAssignedDescriptorIDs();
+        }else if(object instanceof IDocument){
+            IArchiveClass documentClass = ((IDocument) object).getArchiveClass();
+            descIds = documentClass.getAssignedDescriptorIDs();
+        }else if(object instanceof ITask){
+            IProcessType processType = ((ITask) object).getProcessType();
+            descIds = processType.getAssignedDescriptorIDs();
+        }else if(object instanceof IProcessInstance){
+            IProcessType processType = ((IProcessInstance) object).getProcessType();
+            descIds = processType.getAssignedDescriptorIDs();
+        }
+
+        List<String> descList = Arrays.asList(descIds);
+        for(String dId : descList){
+            if(checkList.contains(dId)){return true;}
+        }
+        return false;
+    }
+    static JSONObject getSystemConfig() throws Exception {
+        return getSystemConfig(null);
+    }
+    static JSONObject getSystemConfig(IStringMatrix mtrx) throws Exception {
         if(mtrx == null){
-            mtrx = ses.getDocumentServer().getStringMatrix("CCM_SYSTEM_CONFIG", ses);
+            mtrx = server.getStringMatrix("CCM_SYSTEM_CONFIG", session);
         }
         if(mtrx == null) throw new Exception("SystemConfig Global Value List not found");
 
         List<List<String>> rawTable = mtrx.getRawRows();
 
-        String srvn = ses.getSystem().getName().toUpperCase();
+        String srvn = session.getSystem().getName().toUpperCase();
         JSONObject rtrn = new JSONObject();
         for(List<String> line : rawTable) {
             String name = line.get(0);
@@ -61,8 +133,7 @@ public class Utils {
         }
         return rtrn;
     }
-    public static Row
-    getMasterRow(Sheet sheet, String prfx, Integer colIx)  {
+    public static Row getMasterRow(Sheet sheet, String prfx, Integer colIx)  {
         for (Row row : sheet) {
             Cell cll1 = row.getCell(colIx);
             if(cll1 == null){continue;}
@@ -76,8 +147,7 @@ public class Utils {
         }
         return null;
     }
-    private static Row
-    copyRow(org.apache.poi.ss.usermodel.Workbook workbook, Sheet worksheet, int sourceRowNum, int destinationRowNum) {
+    private static Row copyRow(org.apache.poi.ss.usermodel.Workbook workbook, Sheet worksheet, int sourceRowNum, int destinationRowNum) {
 
         Row newRow = worksheet.getRow(destinationRowNum);
         Row sourceRow = worksheet.getRow(sourceRowNum);
@@ -149,8 +219,7 @@ public class Utils {
 
         return newRow;
     }
-    public static void
-    loadTableRows(String spth, Integer shtIx, String prfx, Integer colIx, Integer scpy) throws IOException {
+    public static void loadTableRows(String spth, Integer shtIx, String prfx, Integer colIx, Integer scpy) throws IOException {
 
         FileInputStream tist = new FileInputStream(spth);
         XSSFWorkbook twrb = new XSSFWorkbook(tist);
@@ -189,16 +258,14 @@ public class Utils {
         tost.close();
 
     }
-    public static boolean
-    hasDescriptor(IInformationObject infObj, String dscn) throws Exception {
+    public static boolean hasDescriptor_old01(IInformationObject infObj, String dscn) throws Exception {
         IValueDescriptor[] vds = infObj.getDescriptorList();
         for(IValueDescriptor vd : vds){
             if(vd.getName().equals(dscn)){return true;}
         }
         return false;
     }
-    public static String
-    updateCell(String str, JSONObject bookmarks){
+    public static String updateCell(String str, JSONObject bookmarks){
         StringBuffer rtr1 = new StringBuffer();
         String tmp = str + "";
         Pattern ptr1 = Pattern.compile( "\\{([\\w\\.]+)\\}" );
@@ -231,8 +298,7 @@ public class Utils {
         }
     }
      */
-    public static String
-    exportDocument(IDocument document, String exportPath, String fileName) throws IOException {
+    public static String exportDocument(IDocument document, String exportPath, String fileName) throws IOException {
         String rtrn ="";
         IDocumentPart partDocument = document.getPartDocument(document.getDefaultRepresentation() , 0);
         String fName = (!fileName.isEmpty() ? fileName : partDocument.getFilename());
@@ -253,8 +319,7 @@ public class Utils {
         }
         return rtrn;
     }
-    public static void
-    saveWBInboxExcel(String tpth, Integer shtIx,JSONObject pbks) throws IOException {
+    public static void saveWBInboxExcel(String tpth, Integer shtIx,JSONObject pbks) throws IOException {
 
         FileInputStream tist = new FileInputStream(tpth);
         XSSFWorkbook twrb = new XSSFWorkbook(tist);
@@ -292,7 +357,6 @@ public class Utils {
         twrb.write(tost);
         tost.close();
     }
-
     static IInformationObject getProjectWorkspace(String prjn, ProcessHelper helper) {
         StringBuilder builder = new StringBuilder();
         builder.append("TYPE = '").append(Conf.ClassIDs.ProjectWorkspace).append("'")
@@ -305,7 +369,7 @@ public class Utils {
         if(informationObjects.length < 1) {return null;}
         return informationObjects[0];
     }
-    static IDocument getTemplateDocument(IInformationObject info, String tpltName, ISession ses, IDocumentServer srv) throws Exception {
+    static IDocument getTemplateDocument(IInformationObject info, String tpltName) throws Exception {
         List<INode> nods = ((IFolder) info).getNodesByName("Templates");
         IDocument rtrn = null;
         for(INode node : nods){
@@ -327,13 +391,12 @@ public class Utils {
             }
             if(rtrn != null){break;}
         }
-        if(srv != null && ses != null) {
-            rtrn = srv.getDocumentCurrentVersion(ses, rtrn.getID());
+        if(server != null && session != null) {
+            rtrn = server.getDocumentCurrentVersion(session, rtrn.getID());
         }
         return rtrn;
     }
-    public static JSONObject
-    getExcelConfig(String excelPath) throws Exception {
+    public static JSONObject getExcelConfig(String excelPath) throws Exception {
         JSONObject rtrn = new JSONObject();
 
         FileInputStream fist = new FileInputStream(excelPath);
@@ -381,8 +444,7 @@ public class Utils {
         }
         return rtrn;
     }
-    public static String
-    convertExcelToHtml(String excelPath, String htmlPath)  {
+    public static String convertExcelToHtml(String excelPath, String htmlPath)  {
         Workbook workbook = new Workbook();
         workbook.loadFromFile(excelPath);
         Worksheet sheet = workbook.getWorksheets().get(0);
@@ -395,27 +457,23 @@ public class Utils {
     getFileContent (String path) throws Exception {
         return new String(Files.readAllBytes(Paths.get(path)));
     }
-    static String
-    getHTMLFileContent (String path) throws Exception {
+    static String getHTMLFileContent (String path) throws Exception {
         String rtrn = new String(Files.readAllBytes(Paths.get(path)));
         rtrn = rtrn.replace("\uFEFF", "");
         rtrn = rtrn.replace("ï»¿", "");
         return rtrn;
     }
-    static IStringMatrix
-    getMailConfigMatrix(ISession ses, IDocumentServer srv, String mtpn) throws Exception {
-        IStringMatrix rtrn = srv.getStringMatrix("CCM_MAIL_CONFIG", ses);
+    static IStringMatrix getMailConfigMatrix() throws Exception {
+        IStringMatrix rtrn = server.getStringMatrix("CCM_MAIL_CONFIG", session);
         if (rtrn == null) throw new Exception("MailConfig Global Value List not found");
         return rtrn;
     }
-    static JSONObject
-    getMailConfig(ISession ses, IDocumentServer srv, String mtpn) throws Exception {
-        return getMailConfig(ses, srv, mtpn, null);
+    static JSONObject getMailConfig() throws Exception {
+        return getMailConfig(null);
     }
-    static JSONObject
-    getMailConfig(ISession ses, IDocumentServer srv, String mtpn, IStringMatrix mtrx) throws Exception {
+    static JSONObject getMailConfig(IStringMatrix mtrx) throws Exception {
         if(mtrx == null){
-            mtrx = getMailConfigMatrix(ses, srv, mtpn);
+            mtrx = getMailConfigMatrix();
         }
         if(mtrx == null) throw new Exception("MailConfig Global Value List not found");
         List<List<String>> rawTable = mtrx.getRawRows();
@@ -426,8 +484,7 @@ public class Utils {
         }
         return rtrn;
     }
-    static void
-    sendHTMLMail(ISession ses, IDocumentServer srv, JSONObject mcfg, JSONObject pars) throws Exception {
+    static void sendHTMLMail(JSONObject mcfg, JSONObject pars) throws Exception {
         String host = mcfg.getString("host");
         String port = mcfg.getString("port");
         String protocol = mcfg.getString("protocol");
