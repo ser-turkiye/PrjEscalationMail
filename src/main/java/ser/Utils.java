@@ -368,8 +368,7 @@ public class Utils {
         IInformationObject[] informationObjects = helper.createQuery(new String[]{Conf.Databases.ProjectFolder}, whereClause, "", 1, false);
         if(informationObjects.length < 1) {return null;}
         return informationObjects[0];
-    }
-    static IDocument getTemplateDocument(IInformationObject info, String tpltName) throws Exception {
+    }    static IDocument getTemplateDocument(IInformationObject info, String tpltName) throws Exception {
         List<INode> nods = ((IFolder) info).getNodesByName("Templates");
         IDocument rtrn = null;
         for(INode node : nods){
@@ -391,7 +390,7 @@ public class Utils {
             }
             if(rtrn != null){break;}
         }
-        if(server != null && session != null) {
+        if(rtrn != null && server != null && session != null) {
             rtrn = server.getDocumentCurrentVersion(session, rtrn.getID());
         }
         return rtrn;
